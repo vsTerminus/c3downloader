@@ -10,8 +10,8 @@ If you have existing con files from C3, put them in this directory and the scrip
 
 INSTALL:
 
-    - Script requires JSON::Parse and LWP::Simple to function.
-    - Create the "cons" and "cons/c3" folders, as the script will not try to create them
+    - Script requires JSON::Parse, LWP::Simple, and Parallel::ForkManager to run.
+    - Create the "Cons" and "Cons/C3" folders, as the script will not try to create them for you
 
 RUN:
 
