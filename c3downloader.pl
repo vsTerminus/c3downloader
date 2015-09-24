@@ -97,7 +97,6 @@ foreach my $entry ( @{$table->{'data'}} )
     
     my $released = $entry->{'ReleasedOn'};
     my $updated = ( defined $entry->{'UpdatedOn'} ? $entry->{'UpdatedOn'} : 0 );
-    print "\tUpdated: $updated // Released: $released\n";
 
     # Which is more recent? The Release Date or Update Date?
     # Update Date will be, but only if it is defined. So check them both.
