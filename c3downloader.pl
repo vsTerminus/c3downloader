@@ -2,9 +2,11 @@
 
 # LWP::Simple lets us download pages
 # JSON::Parse lets us convert JSON structures into Perl structures
-# Parallel::ForkManager makes it easier for us to do multiple downloads at a time
-use Parallel::ForkManager;
+# Mojo::UserAgent and Mojo::IOLoop let us run asynchronous non-blocking HTTP requests without threads or forking
+use Mojo::UserAgent;
+use Mojo::IOLoop;
 use LWP::Simple;
+use File::Basename; # Because I am lazy.
 use JSON::Parse ('valid_json', 'parse_json');
 
 use strict;
@@ -27,7 +29,7 @@ sub comparable
 
 
 # Vars
-my $song_count = 2000; # Fetch this many songs on a single page. Basically, set this high enough that you get everything.
+my $song_count = 11; # Fetch this many songs on a single page. Basically, set this high enough that you get everything.
 my $sort_by = "ReleasedOn";
 my $sort_direction = "DESC";
 my $url = "http://pksage.com/songlist/php/songlist.php?_dc=1443067770349&whichGame=rb&andor=&page=1&start=0&limit=$song_count&sort=%5B%7B%22property%22%3A%22$sort_by%22%2C%22direction%22%3A%22$sort_direction%22%7D%5D&filter=%5B%7B%22property%22%3A%22Source%22%2C%22value%22%3A%22Custom%20Songs%7Cis%22%7D%5D";
@@ -122,7 +124,7 @@ foreach my $entry ( @{$table->{'data'}} )
 
         # The Base Name is the filename without any directory structure included.
         # eg, "/stuff/things/file.mp3" has a basename of "file.mp3"
-        my ($base_name) = $real_download =~ /^.*\/(.+$)/;
+        my $base_name = basename($real_download);
 
         print localtime(time) . ": Queued '" . $entry->{'FullName'} . "' for download.\n";
         $downloads{$base_name} = $dl_prefix . $real_download;
@@ -166,23 +168,40 @@ if ( scalar (keys %downloads) != $num_downloads )
     print localtime(time) . ": $num_downloads downloads remain.\n";
 }
 
-# Parallel Manager
-my $pm = Parallel::ForkManager->new($max_concurrent_downloads);
-
+my $active = 0;
 my $i = 0;
-LINKS:
-foreach my $key ( keys (%downloads) )
+my $ua = Mojo::UserAgent->new();
+my @download_array = (values %downloads);
+
+Mojo::IOLoop->recurring(0 => sub 
 {
+    for ( $active + 1 .. $max_concurrent_downloads)
+    {
+        # Stop if there are no active connections or if we have downloaded everything
+        return ($active or Mojo::IOLoop->stop or $i >= $num_downloads) unless my $url = shift @download_array;
+   
+        # Fetch non-blocking
+        ++$active;
+        $ua->get($url => \&get_callback)
+    }
+});
+
+sub get_callback
+{
+    my (undef, $tx) = @_;
+    
+    --$active;
+    my $url = $tx->req->url;
     $i++;
-    $pm->start and next LINKS; # Fork
+    print localtime(time) . ": $i / $num_downloads downloaded (" . basename($url) . ")\n";
 
-    my $msg = sprintf("[%04s / %04s] Downloading %s", $i, $num_downloads, $key);
-    print localtime(time) . ": $msg\n";
-    getstore($downloads{$key}, $con_dir . '/' . $key);
-
-    $pm->finish; # Exit the child process
+    open my $fh, '>' . $con_dir . '/' . basename($url);
+    print $fh $tx->req->body;
+    close $fh;
 }
-$pm->wait_all_children; # Wait for all downloads to finish before continuing
+
+# Start Mojo Loop if necessary
+Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 
 # Finally, if we've made it this far we can update the last_update_file
 print localtime(time) . ": New 'Last Update' time: $most_recent\n";
