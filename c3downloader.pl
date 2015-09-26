@@ -5,9 +5,7 @@
 # Mojo::UserAgent and Mojo::IOLoop let us run asynchronous non-blocking HTTP requests without threads or forking
 use Mojo::UserAgent;
 use Mojo::IOLoop;
-use LWP::Simple;
 use File::Basename; # Because I am lazy.
-use JSON::Parse ('valid_json', 'parse_json');
 
 use strict;
 use warnings;
@@ -29,6 +27,7 @@ sub comparable
 
 
 # Vars
+my $ua = Mojo::UserAgent->new();
 my $song_count = 2000; # Fetch this many songs on a single page. Basically, set this high enough that you get everything.
 my $sort_by = "ReleasedOn";
 my $sort_direction = "DESC";
@@ -100,31 +99,19 @@ if ( -e $cache_file )
 
 # Fetch the raw JSON data that C3's jquery grid table dresses up
 print localtime(time) . ": Fetching raw JSON data...\n";
-my $json = get($url);
+my $json = $ua->get($url)->res->json;    # Download the JSON data
 
 die("Unable to retrieve Song List from C3!\n\nDied") unless defined $json;
 
-# Check to make sure the JSON is valid.
-print localtime(time) . ": Validating JSON structure...\n";
-unless( valid_json($json) )
-{
-    print "Invalid JSON:\n-----------\n\n$json\n\n-------\n";
-    die("Unable to parse JSON Song List\n\nDied") unless valid_json ($json);
-}
-
-# Now convert the JSON into a Perl HASH structure.
-print localtime(time) . ": Parsing JSON structure...\n";
-my $table = parse_json($json);
-
-die("JSON call failed\n\nDied") unless $table->{'success'};
+die("JSON call failed\n\nDied") unless $json->{'success'};
 
 # How many entries does the server report?
-print localtime(time) . ": Parsing " . $table->{'total'} . " song entries\n";
+print localtime(time) . ": Parsing " . $json->{'total'} . " song entries\n";
 
 # For each entry, collect some info and determine the "Real" download url
 # The download link in the JSON array just takes you to another page that contains the real link in some JS.
 # We need to extract that for the downloads.
-foreach my $entry ( @{$table->{'data'}} )
+foreach my $entry ( @{$json->{'data'}} )
 {
     my $real_download;
     my $download_page;
@@ -134,7 +121,7 @@ foreach my $entry ( @{$table->{'data'}} )
         # Cache miss
         
         # The download link here is not the actual D/L, it's just a link to a page that has it.
-        $download_page = get($entry->{'CustomDownloadURL'});
+        $download_page = $ua->get($entry->{'CustomDownloadURL'})->res->body;
     
         if ( !defined($download_page) )
         {
@@ -224,7 +211,6 @@ if ( scalar (keys %downloads) != $num_downloads )
 
 my $active = 0;
 my $i = 0;
-my $ua = Mojo::UserAgent->new();
 my @download_array = (values %downloads);
 
 Mojo::IOLoop->recurring(0 => sub 
