@@ -17,8 +17,6 @@ INSTALL:
         - Mojo::UserAgent
         - Mojo::IOLoop
         - File::Basename
-    - Create the "Cons" and "Cons/C3" folders, as the script will not try to create them for you
-        - mkdir -p Cons/C3
 
 RUN:
 
