@@ -150,6 +150,12 @@ foreach my $entry ( @{$json->{'data'}} )
         if ( exists $links{$entry->{'ShortName'}} )
         {
             $real_download = $links{$entry->{'ShortName'}};
+
+            if ( $real_download eq 'nolink' )
+            {
+                print localtime(time) . ": Skipping '" . $entry->{'FullName'} . "' (No download link)\n";
+                next;
+            }
         }
         # Otherwise we'll get it from the download page.
         else
@@ -160,6 +166,10 @@ foreach my $entry ( @{$json->{'data'}} )
             if ( !defined($real_download) )
             {
                 print localtime(time) . ": Skipping '" . $entry->{'FullName'} . "' (Could not find the real download link)\n";
+
+                # Cache this too, so the script can skip it next time.
+                $links{$entry->{'ShortName'}} = 'nolink';                
+
                 next;
             }
         }
