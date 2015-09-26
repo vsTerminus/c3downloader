@@ -7,13 +7,10 @@ Note: Requires you to install a few things:
 Install the rest from cpan by opening a windows cmd prompt and typing:
 
 2. cpan PAR::Packer
-3. cpan LWP::Simple
 4. cpan Mojo::UserAgent
 6. cpan Mojo::IOLoop
 5. cpan JSON::Parse
 6. cpan File::Basename
-
-LWP::Simple will be phased out in the future once I've re-written all http downloads to use Mojo::UserAgent
 
 Now just run build.bat to compile the Perl script into an executable that can be run on Windows with or without Perl installed.
 

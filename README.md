@@ -13,7 +13,6 @@ INSTALL:
     - Requires perl, obviously. 
     - Install the following CPAN modules (preferably using cpanminus)
         - JSON::Parse
-        - LWP::Simple
         - Mojo::UserAgent
         - Mojo::IOLoop
         - File::Basename
