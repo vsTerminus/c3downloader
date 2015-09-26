@@ -29,7 +29,7 @@ sub comparable
 
 
 # Vars
-my $song_count = 3; # Fetch this many songs on a single page. Basically, set this high enough that you get everything.
+my $song_count = 2000; # Fetch this many songs on a single page. Basically, set this high enough that you get everything.
 my $sort_by = "ReleasedOn";
 my $sort_direction = "DESC";
 my $url = "http://pksage.com/songlist/php/songlist.php?_dc=1443067770349&whichGame=rb&andor=&page=1&start=0&limit=$song_count&sort=%5B%7B%22property%22%3A%22$sort_by%22%2C%22direction%22%3A%22$sort_direction%22%7D%5D&filter=%5B%7B%22property%22%3A%22Source%22%2C%22value%22%3A%22Custom%20Songs%7Cis%22%7D%5D";
@@ -132,7 +132,6 @@ foreach my $entry ( @{$table->{'data'}} )
     if ( !exists $links{$entry->{'ShortName'}} )
     {
         # Cache miss
-        print "\tCache Miss\n";
         
         # The download link here is not the actual D/L, it's just a link to a page that has it.
         $download_page = get($entry->{'CustomDownloadURL'});
