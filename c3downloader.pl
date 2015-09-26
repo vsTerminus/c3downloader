@@ -29,18 +29,38 @@ sub comparable
 
 
 # Vars
-my $song_count = 2000; # Fetch this many songs on a single page. Basically, set this high enough that you get everything.
+my $song_count = 3; # Fetch this many songs on a single page. Basically, set this high enough that you get everything.
 my $sort_by = "ReleasedOn";
 my $sort_direction = "DESC";
 my $url = "http://pksage.com/songlist/php/songlist.php?_dc=1443067770349&whichGame=rb&andor=&page=1&start=0&limit=$song_count&sort=%5B%7B%22property%22%3A%22$sort_by%22%2C%22direction%22%3A%22$sort_direction%22%7D%5D&filter=%5B%7B%22property%22%3A%22Source%22%2C%22value%22%3A%22Custom%20Songs%7Cis%22%7D%5D";
 my $dl_prefix = "http://keepitfishy.com/";
 my $last_update_file = "last_update.txt";
 my $last_update_time = "1969-12-31 23:59:59";
+my $cache_file = "cache.csv";
 my $con_dir = "Cons/C3"; # Should be relative. Must not have trailing /
 my %downloads;  # This hash will be $downloads{'FileName'} = 'DownloadURL'
 my $start_time = time;
 my $most_recent = '1970-01-01 01:01:01';    # This will store the most recent Release Date or Update Date
 my $max_concurrent_downloads = 6;   # How many files should we download at once?
+my %links;  # Used for our cached links
+
+# Very first thing: Check for the Cons/C3 directory. Try to create it if possible.
+unless (-d $con_dir )
+{
+    print localtime(time) . ": Con directory ('$con_dir') does not exist. Attempting to creat it.\n";
+
+    my $os = "$^O";
+
+    if ( $os eq 'linux' )
+    {
+        `mkdir -p Cons/C3`;
+    }
+    else # Windows
+    {
+        `md "Cons/C3"`
+    }  
+}
+die("Unable to open Con directory ('$con_dir')! Cannot continue until you create those directories.\n\nDied") unless ( -d $con_dir );
 
 # Last-Update file
 # This file just contains a date/time on a single line that gives this script a reference point
@@ -57,6 +77,24 @@ if ( -e $last_update_file )
 else
 {
     print localtime(time) . ": No Update File found. This will trigger a full DB download.\n";
+}
+
+# Load the cache file.
+if ( -e $cache_file )
+{
+    open my $fh, "<$cache_file";
+    my @lines = <$fh>;
+    close $fh;
+
+    foreach my $line (@lines)
+    {
+        chomp $line;
+        my @parts = split(',', $line);
+        $links{$parts[0]} = $parts[1];
+    }
+
+    my $cache_size = scalar keys %links;
+    print localtime(time) . ": Loaded $cache_size cached links.\n";
 }
 
 
@@ -88,13 +126,22 @@ print localtime(time) . ": Parsing " . $table->{'total'} . " song entries\n";
 # We need to extract that for the downloads.
 foreach my $entry ( @{$table->{'data'}} )
 {
-    # The download link here is not the actual D/L, it's just a link to a page that has it.
-    my $download_page = get($entry->{'CustomDownloadURL'});
+    my $real_download;
+    my $download_page;
 
-    if ( !defined($download_page) )
+    if ( !exists $links{$entry->{'ShortName'}} )
     {
-        print localtime(time) . ": Skipping '" . $entry->{'FullName'} . "' (No download link available)\n";
-        next;
+        # Cache miss
+        print "\tCache Miss\n";
+        
+        # The download link here is not the actual D/L, it's just a link to a page that has it.
+        $download_page = get($entry->{'CustomDownloadURL'});
+    
+        if ( !defined($download_page) )
+        {
+            print localtime(time) . ": Skipping '" . $entry->{'FullName'} . "' (No download link available)\n";
+            next;
+        }
     }
     
     my $released = $entry->{'ReleasedOn'};
@@ -113,13 +160,22 @@ foreach my $entry ( @{$table->{'data'}} )
     # Otherwise skip over it.
     if ( comparable($released) > comparable($last_update_time) or comparable($updated) > comparable($last_update_time) )
     {
-        # Grab the real download link from the download page
-        my ($real_download) = $download_page =~ /URL=(.+)"/; # So hacky. Oh well.
-
-        if ( !defined($real_download) )
+        # If we have already grabbed the download link for this song it will be in our links hash.
+        if ( exists $links{$entry->{'ShortName'}} )
         {
-            print localtime(time) . ": Skipping '" . $entry->{'FullName'} . "' (Could not find the real download link)\n";
-            next;
+            $real_download = $links{$entry->{'ShortName'}};
+        }
+        # Otherwise we'll get it from the download page.
+        else
+        {
+            # Grab the real download link from the download page
+            ($real_download) = $download_page =~ /URL=(.+)"/; # So hacky. Oh well.
+
+            if ( !defined($real_download) )
+            {
+                print localtime(time) . ": Skipping '" . $entry->{'FullName'} . "' (Could not find the real download link)\n";
+                next;
+            }
         }
 
         my $basename = basename($real_download);
@@ -140,6 +196,9 @@ foreach my $entry ( @{$table->{'data'}} )
             $downloads{$basename} = $dl_prefix . $real_download;
             print localtime(time) . ": Queued '" . $entry->{'FullName'} . "' for download.\n";
         }
+
+        # Let's cache this link. 
+        $links{$entry->{'ShortName'}} = $real_download;
     }
     elsif ( comparable($released) <= comparable($last_update_time) and comparable($updated) <= comparable($last_update_time) )
     {
@@ -154,10 +213,7 @@ foreach my $entry ( @{$table->{'data'}} )
 # So now we have a list of downloads. Let's do it!
 my $num_downloads = scalar (keys %downloads);
 
-print localtime(time) . ": $num_downloads files queued for download.\n";
-
-print localtime(time) . ": Checking local files.\n";
-
+print localtime(time) . ": Downloading $num_downloads files.\n";
 
 # If we removed any queued downloads due to existing local files, print the new total to the screen
 # and update the num_downloads variable.
@@ -208,5 +264,13 @@ print localtime(time) . ": New 'Last Update' time: $most_recent\n";
 open my $out, ">$last_update_file";
 print $out $most_recent;
 close $out;
+
+# And write out the cache file.
+open my $cache_out, ">$cache_file";
+foreach my $key (keys %links)
+{
+    print $cache_out $key . "," . $links{$key} . "\n";
+}
+close $cache_out;
 
 print localtime(time) . ": Complete!\n";
