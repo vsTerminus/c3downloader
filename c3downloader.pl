@@ -29,7 +29,7 @@ sub comparable
 
 
 # Vars
-my $song_count = 11; # Fetch this many songs on a single page. Basically, set this high enough that you get everything.
+my $song_count = 30; # Fetch this many songs on a single page. Basically, set this high enough that you get everything.
 my $sort_by = "ReleasedOn";
 my $sort_direction = "DESC";
 my $url = "http://pksage.com/songlist/php/songlist.php?_dc=1443067770349&whichGame=rb&andor=&page=1&start=0&limit=$song_count&sort=%5B%7B%22property%22%3A%22$sort_by%22%2C%22direction%22%3A%22$sort_direction%22%7D%5D&filter=%5B%7B%22property%22%3A%22Source%22%2C%22value%22%3A%22Custom%20Songs%7Cis%22%7D%5D";
@@ -122,12 +122,24 @@ foreach my $entry ( @{$table->{'data'}} )
             next;
         }
 
-        # The Base Name is the filename without any directory structure included.
-        # eg, "/stuff/things/file.mp3" has a basename of "file.mp3"
-        my $base_name = basename($real_download);
-
-        print localtime(time) . ": Queued '" . $entry->{'FullName'} . "' for download.\n";
-        $downloads{$base_name} = $dl_prefix . $real_download;
+        my $basename = basename($real_download);
+        
+        # Check to see if the file exists locally already.
+        # This way users who want to fill out their collection with missing files can do so
+        # without having to re-download their existing files.
+        # It also provides a way to "resume" a crashed or failed run and try again.
+        #
+        # Finally, only skip over songs that haven't been updated since the last run.
+        # If there was an update we want to redownload the file instead.
+        if ( -f $con_dir . '/' . $basename and comparable($updated) <= comparable($most_recent))
+        {
+            print localtime(time) . ": Skipping '$basename' as it already exists and has not been updated.\n"; 
+        }    
+        else
+        { 
+            $downloads{$basename} = $dl_prefix . $real_download;
+            print localtime(time) . ": Queued '" . $entry->{'FullName'} . "' for download.\n";
+        }
     }
     elsif ( comparable($released) <= comparable($last_update_time) and comparable($updated) <= comparable($last_update_time) )
     {
@@ -147,18 +159,6 @@ print localtime(time) . ": $num_downloads files queued for download.\n";
 
 print localtime(time) . ": Checking local files.\n";
 
-# Check to see if the file exists locally already.
-# This way users who want to fill out their collection with missing files can do so
-# without having to re-download their existing files.
-# It also provides a way to "resume" a crashed or failed run and try again.
-foreach my $key ( keys %downloads )
-{
-    if ( -f $con_dir . '/' . $key )
-    {
-        print localtime(time) . ": File '$key' already exists! Removing it from the download queue.\n"; 
-        delete $downloads{$key};
-    }    
-}
 
 # If we removed any queued downloads due to existing local files, print the new total to the screen
 # and update the num_downloads variable.
@@ -182,6 +182,7 @@ Mojo::IOLoop->recurring(0 => sub
    
         # Fetch non-blocking
         ++$active;
+        print localtime(time) . ": Download Started (" . basename($url) . ")\n";
         $ua->get($url => \&get_callback)
     }
 });
@@ -193,7 +194,7 @@ sub get_callback
     --$active;
     my $url = $tx->req->url;
     $i++;
-    print localtime(time) . ": $i / $num_downloads downloaded (" . basename($url) . ")\n";
+    print localtime(time) . ": $i / $num_downloads Download Complete (" . basename($url) . ")\n";
 
     open my $fh, '>' . $con_dir . '/' . basename($url);
     print $fh $tx->req->body;
