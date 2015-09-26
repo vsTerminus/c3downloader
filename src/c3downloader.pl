@@ -28,6 +28,7 @@ sub comparable
 
 # Vars
 my $ua = Mojo::UserAgent->new();
+$ENV{MOJO_MAX_MESSAGE_SIZE} = 1073741824;   # Mojo sets a default file size limit of 16MB. Let's up this to 1GB.
 my $song_count = 2000; # Fetch this many songs on a single page. Basically, set this high enough that you get everything.
 my $sort_by = "ReleasedOn";
 my $sort_direction = "ASC";
