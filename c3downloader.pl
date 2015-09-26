@@ -40,7 +40,7 @@ my $con_dir = "Cons/C3"; # Should be relative. Must not have trailing /
 my %downloads;  # This hash will be $downloads{'FileName'} = 'DownloadURL'
 my $start_time = time;
 my $most_recent = '1970-01-01 01:01:01';    # This will store the most recent Release Date or Update Date
-my $max_concurrent_downloads = 4;   # How many files should we download at once?
+my $max_concurrent_downloads = 6;   # How many files should we download at once?
 
 # Last-Update file
 # This file just contains a date/time on a single line that gives this script a reference point
@@ -195,9 +195,7 @@ sub get_callback
     $i++;
     print localtime(time) . ": $i / $num_downloads Download Complete (" . basename($url) . ")\n";
 
-    open my $fh, '>' . $con_dir . '/' . basename($url);
-    print $fh $tx->req->body;
-    close $fh;
+    $tx->res->content->asset->move_to($con_dir . '/' . basename($url));
 }
 
 # Start Mojo Loop if necessary
